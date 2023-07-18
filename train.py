@@ -51,10 +51,10 @@ def get_argparser():
                         help="learning rate scheduler policy")
     parser.add_argument("--step_size", type=int, default=10)
   
-    parser.add_argument("--batch_size", type=int, default=2,
+    parser.add_argument("--batch_size", type=int, default=8,
                         help='batch size ')
-    parser.add_argument("--crop_size", type=int, default=320)
-    parser.add_argument("--n_cpu", type=int, default=2,
+    parser.add_argument("--crop_size", type=int, default=512)
+    parser.add_argument("--n_cpu", type=int, default=8,
                         help="download datasets")
     
     parser.add_argument("--ckpt", type=str,
@@ -73,7 +73,6 @@ def get_argparser():
 
 def get_dataset(opts):
     train_transform = et.ExtCompose([
-        et.ExtResize(size=opts.crop_size),
         et.ExtRandomScale((0.5, 2.0)),
         et.ExtRandomCrop(size=(opts.crop_size, opts.crop_size), pad_if_needed=True),
         et.ExtRandomHorizontalFlip(),
@@ -93,37 +92,6 @@ def get_dataset(opts):
     return train_dst, val_dst
 
 
-def validate(opts, model, loader, device, metrics):
-    metrics.reset()
-    with torch.no_grad():
-        for i, (images, labels) in tqdm(enumerate(loader)):
-
-            images = images.to(device, dtype=torch.float32)
-            labels = labels.to(device, dtype=torch.long)
-
-            SOUTS=model(images)
-              
-            outputs=SOUTS[0]
-            outputs=outputs.squeeze()
-            outputs[outputs>=opts.threshold]=1
-            outputs[outputs<opts.threshold]=0
-            
-            preds = outputs.detach().cpu().numpy()
-            
-            preds=preds.astype(int)
-            targets = labels.cpu().numpy()
-            if targets.shape[0]==1:
-                targets=targets.squeeze()
-           
-            metrics.update(targets, preds)   
-
-            if i>100:
-                break
-
-        score = metrics.get_results()
-    return score
-
-
 bce_loss = nn.BCELoss(size_average=True)
 ssim_loss = pytorch_ssim.SSIM(window_size=11,size_average=True)
 iou_loss = pytorch_iou.IOU(size_average=True)
@@ -134,7 +102,6 @@ def bce_ssim_loss(pred,target):
 	iou_out = iou_loss(pred,target)
 	loss = bce_out + ssim_out + iou_out
 	return loss
-
 
 def multi_bce_loss(d0,d1,d2,d3,d4, labels):
     loss0=bce_loss(d0, labels)
@@ -183,9 +150,7 @@ def main():
     print("Dataset: %s, Train set: %d, Val set: %d" %
           (opts.dataset, len(train_dst), len(val_dst)))
 
- 
     model = DBSNet(n_channels=3, phi=opts.phi)
-    
 
     opts.model+='_'+opts.phi
     metrics = StreamSegMetrics(opts.num_classes)
@@ -263,24 +228,13 @@ def main():
             optimizer.step()
 
             data_loader.desc = "Epoch {}/{}, loss={:.4f}".format(epoch, opts.epochs, running_loss/cur_itrs)
-            
+        
             scheduler.step()
-
-            if cur_itrs>100:
-                break
           
         if (epoch+1) % opts.val_interval == 0:
             save_ckpt('CHKP_BAS/latest_{}_{}_{}.pth'.format(opts.model, opts.dataset, 
                                                             opts.loss_type))
-        
-        print("validation...")
-        model.eval()
-        val_score = validate(
-            opts=opts, model=model, loader=val_loader, device=device, metrics=metrics)
-        
-        print('val_score:',val_score)
     
     
-
 if __name__ == '__main__':
     main()
