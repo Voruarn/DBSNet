@@ -9,7 +9,6 @@ import sys
 from torch.utils import data
 from datasets.LC8BASDataset import LC8BASDataset
 from utils import ext_transforms as et
-from metrics import StreamSegMetrics
 from network.DBSNet import DBSNet
 import torch.nn.functional as F
 import torch
@@ -153,7 +152,7 @@ def main():
     model = DBSNet(n_channels=3, phi=opts.phi)
 
     opts.model+='_'+opts.phi
-    metrics = StreamSegMetrics(opts.num_classes)
+ 
     optimizer = torch.optim.SGD(params=model.parameters(), lr=opts.lr, momentum=0.9, weight_decay=opts.weight_decay)
  
     if opts.lr_policy == 'poly':
